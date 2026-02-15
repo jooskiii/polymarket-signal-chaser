@@ -2,10 +2,14 @@
 
 import json
 import logging
+import re
+from pathlib import Path
 
 import anthropic
 
 logger = logging.getLogger(__name__)
+
+DEBUG_LOG_PATH = Path(__file__).resolve().parents[2] / "data" / "llm_debug.log"
 
 MODEL = "claude-haiku-4-5-20251001"
 
@@ -41,6 +45,47 @@ def _extract_prices(market):
     return yes_price, no_price
 
 
+def _parse_json_response(text):
+    """Extract JSON from an LLM response, handling markdown fences and whitespace."""
+    # Already a dict (shouldn't happen, but handle it)
+    if isinstance(text, dict):
+        return text
+
+    # Strip markdown code fences: ```json ... ``` or ``` ... ```
+    stripped = re.sub(r"^```(?:json)?\s*\n?", "", text, flags=re.IGNORECASE)
+    stripped = re.sub(r"\n?```\s*$", "", stripped)
+    stripped = stripped.strip()
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # Last resort: find the first { ... } block
+    match = re.search(r"\{.*\}", stripped, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    logger.warning("Could not parse LLM response as JSON: %s", text[:200])
+    return None
+
+
+def _log_debug(headline, market_question, raw_response):
+    """Append raw LLM response to a debug log file."""
+    try:
+        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(DEBUG_LOG_PATH, "a") as f:
+            f.write(f"headline: {headline}\n")
+            f.write(f"market:   {market_question}\n")
+            f.write(f"response: {raw_response}\n")
+            f.write("-" * 60 + "\n")
+    except OSError:
+        pass
+
+
 def assess_match(headline, market, api_key):
     """Ask Claude Haiku whether a headline is relevant to a market.
 
@@ -70,9 +115,10 @@ def assess_match(headline, market, api_key):
             messages=[{"role": "user", "content": prompt}],
         )
         text = response.content[0].text.strip()
-        result = json.loads(text)
+        _log_debug(headline["title"], market.get("question", ""), text)
+        result = _parse_json_response(text)
         return result
-    except (anthropic.APIError, json.JSONDecodeError) as e:
+    except anthropic.APIError as e:
         logger.warning("LLM assessment failed: %s", e)
         return None
     except Exception as e:

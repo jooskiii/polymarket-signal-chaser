@@ -101,8 +101,12 @@ def main():
         else:
             matches_without_trade += 1
 
-    # Trade performance
+    # Trade performance — all trades (open + closed)
     total_trades = len(trader._trades)
+    skipped_count = len(trader._skipped)
+    open_results = [r for r in trade_results if r["trade"]["status"] == "open"]
+    closed_results = [r for r in trade_results if r["trade"]["status"] == "closed"]
+
     if trade_results:
         wins = sum(1 for r in trade_results if r["pnl_usd"] > 0)
         losses = sum(1 for r in trade_results if r["pnl_usd"] < 0)
@@ -116,6 +120,12 @@ def main():
         wins = losses = flat = 0
         win_rate = avg_return = total_pnl = 0
         avg_held = timedelta()
+
+    # Exit reason breakdown
+    exit_reasons = {}
+    for r in closed_results:
+        reason = r["trade"].get("exit_reason", "unknown")
+        exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
 
     # ── Print dashboard ──────────────────────────────────────────────
     print()
@@ -133,12 +143,17 @@ def main():
     print(f"    -> became trades:      {matches_with_trade}")
     print(f"    -> no trade:           {matches_without_trade}")
     print(f"  Paper trades logged:     {total_trades}")
+    print(f"  Skipped (low liquidity): {skipped_count}")
 
     print()
     print("  Paper Trade Performance")
     print("  " + "-" * 40)
     if total_trades > 0:
-        print(f"  Open trades:     {len(trade_results)}")
+        print(f"  Open trades:     {len(open_results)}")
+        print(f"  Closed trades:   {len(closed_results)}")
+        if exit_reasons:
+            reason_str = ", ".join(f"{v} {k}" for k, v in sorted(exit_reasons.items()))
+            print(f"  Exit reasons:    {reason_str}")
         print(f"  Wins / Losses:   {wins}W / {losses}L / {flat}F")
         print(f"  Win rate:        {win_rate:.1f}%")
         print(f"  Avg return:      {avg_return:+.2f}%")
@@ -154,10 +169,9 @@ def main():
     print("=" * 60)
 
     if not trade_results:
-        print("\n  No open paper trades to display.")
+        print("\n  No paper trades to display.")
         print("  Run `python -m src.paper_trading.log` to log trades.")
     else:
-        # Sort by timestamp descending, take 5
         sorted_results = sorted(
             trade_results,
             key=lambda r: r["trade"]["timestamp"],
@@ -166,14 +180,23 @@ def main():
 
         for i, r in enumerate(sorted_results, 1):
             t = r["trade"]
-            status = "WIN" if r["pnl_usd"] > 0 else ("LOSS" if r["pnl_usd"] < 0 else "FLAT")
+            is_closed = t["status"] == "closed"
 
-            print(f"\n  [{i}] {t['trade_id']} — {status}")
+            if is_closed:
+                outcome = "WIN" if r["pnl_usd"] > 0 else ("LOSS" if r["pnl_usd"] < 0 else "FLAT")
+                label = f"CLOSED — {t.get('exit_reason', '?')} — {outcome}"
+            else:
+                label = "OPEN"
+
+            print(f"\n  [{i}] {t['trade_id']} — {label}")
             print(f"      Market:    {t['market_title']}")
             print(f"      Headline:  {t['headline']}")
             print(f"      Direction: {t['direction']}")
             print(f"      Entry:     ${t['entry_price']:.4f}")
-            print(f"      Current:   ${r['current_price']:.4f}")
+            if is_closed:
+                print(f"      Exit:      ${t.get('exit_price', 0):.4f}")
+            else:
+                print(f"      Current:   ${r['current_price']:.4f}")
             print(f"      P&L:       ${r['pnl_usd']:+.2f} ({r['pnl_pct']:+.2f}%)")
             print(f"      Held:      {_fmt_duration(r['time_held'])}")
             print(f"      LLM conf:  {t['llm_confidence']}")

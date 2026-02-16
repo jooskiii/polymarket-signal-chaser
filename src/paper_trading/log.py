@@ -45,7 +45,7 @@ def main():
     trader = PaperTrader(market_store, engine)
 
     print("\nRunning matching engine and logging trades...")
-    new_trades = trader.log_trades()
+    new_trades, new_skipped = trader.log_trades()
 
     # Report
     print()
@@ -53,7 +53,7 @@ def main():
     print("Paper Trade Results")
     print("=" * 60)
 
-    if not new_trades:
+    if not new_trades and not new_skipped:
         print("No new trades logged (no high-confidence signals or all duplicates).")
         total = len(trader._trades)
         if total:
@@ -61,6 +61,7 @@ def main():
         return
 
     print(f"New trades logged: {len(new_trades)}")
+    print(f"Skipped (insufficient liquidity): {len(new_skipped)}")
     print(f"Total trades in log: {len(trader._trades)}")
     print()
 
@@ -69,12 +70,19 @@ def main():
         print(f"  Market:     {trade['market_title']}")
         print(f"  Headline:   {trade['headline']}")
         print(f"  Direction:  {trade['direction']}")
-        print(f"  Entry:      ${trade['entry_price']:.4f}")
+        print(f"  Entry:      ${trade['entry_price']:.4f} (VWAP)")
         print(f"  Shares:     {trade['shares']:.2f}")
         print(f"  Size:       ${trade['position_size_usd']:.2f}")
         print(f"  Embedding:  {trade['embedding_score']:.4f}")
         print(f"  LLM conf:   {trade['llm_confidence']}")
         print(f"  Reasoning:  {trade['llm_reasoning']}")
+        print()
+
+    for i, skip in enumerate(new_skipped, 1):
+        print(f"--- Skipped {i} ---")
+        print(f"  Market:     {skip['market_title']}")
+        print(f"  Headline:   {skip['headline']}")
+        print(f"  Reason:     {skip['reason']}")
         print()
 
 

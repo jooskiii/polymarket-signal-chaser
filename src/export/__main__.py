@@ -133,7 +133,7 @@ def export_matches(matches, trade_keys, out_dir):
 
 
 def export_trades(trader, out_dir):
-    """Write trades.csv — all paper trades with P&L and outcome."""
+    """Write trades.csv — all paper trades (open + closed) with P&L and outcome."""
     path = out_dir / "trades.csv"
     trade_results = trader.check_trades()
 
@@ -141,8 +141,9 @@ def export_trades(trader, out_dir):
         writer = csv.writer(f)
         writer.writerow([
             "trade_id", "timestamp", "market_id", "market_title", "headline",
-            "direction", "entry_price", "current_price", "shares",
+            "direction", "status", "entry_price", "current_price", "shares",
             "pnl_usd", "pnl_pct", "time_held",
+            "exit_price", "exit_timestamp", "exit_reason",
             "embedding_score", "llm_confidence", "llm_reasoning", "outcome",
         ])
         for r in trade_results:
@@ -155,46 +156,23 @@ def export_trades(trader, out_dir):
                 t["market_title"],
                 t["headline"],
                 t["direction"],
+                t["status"],
                 t["entry_price"],
                 r["current_price"],
                 t["shares"],
                 r["pnl_usd"],
                 f"{r['pnl_pct']:.2f}%",
                 _fmt_duration(r["time_held"]),
+                t.get("exit_price", ""),
+                t.get("exit_timestamp", ""),
+                t.get("exit_reason", ""),
                 t["embedding_score"],
                 t["llm_confidence"],
                 t["llm_reasoning"],
                 outcome,
             ])
 
-    # Also include trades that check_trades skipped (non-open)
-    checked_ids = {r["trade"]["trade_id"] for r in trade_results}
-    extra = [t for t in trader._trades if t["trade_id"] not in checked_ids]
-    if extra:
-        with open(path, "a", newline="") as f:
-            writer = csv.writer(f)
-            for t in extra:
-                writer.writerow([
-                    t["trade_id"],
-                    t["timestamp"],
-                    t["market_id"],
-                    t["market_title"],
-                    t["headline"],
-                    t["direction"],
-                    t["entry_price"],
-                    "",
-                    t["shares"],
-                    "",
-                    "",
-                    "",
-                    t["embedding_score"],
-                    t["llm_confidence"],
-                    t["llm_reasoning"],
-                    t.get("status", ""),
-                ])
-
-    total = len(trade_results) + len(extra)
-    print(f"  trades.csv     — {total} rows")
+    print(f"  trades.csv     — {len(trade_results)} rows")
     return path
 
 

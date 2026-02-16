@@ -133,9 +133,9 @@ def export_matches(matches, trade_keys, out_dir):
 
 
 def export_trades(trader, out_dir):
-    """Write trades.csv — all paper trades (open + closed) with P&L and outcome."""
+    """Write trades.csv — all paper trades (open + closed) directly from JSON."""
     path = out_dir / "trades.csv"
-    trade_results = trader.check_trades()
+    now = datetime.now(timezone.utc)
 
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -146,9 +146,20 @@ def export_trades(trader, out_dir):
             "exit_price", "exit_timestamp", "exit_reason",
             "embedding_score", "llm_confidence", "llm_reasoning", "outcome",
         ])
-        for r in trade_results:
-            t = r["trade"]
-            outcome = "WIN" if r["pnl_usd"] > 0 else ("LOSS" if r["pnl_usd"] < 0 else "FLAT")
+        for t in trader._trades:
+            if t.get("status") == "closed":
+                current_price = t.get("exit_price", t["entry_price"])
+                pnl_usd = t.get("final_pnl_usd", 0)
+                pnl_pct = t.get("final_pnl_pct", 0)
+                held = timedelta(seconds=t.get("hold_duration_seconds", 0))
+            else:
+                current_price = t["entry_price"]
+                pnl_usd = 0
+                pnl_pct = 0
+                trade_time = datetime.fromisoformat(t["timestamp"])
+                held = now - trade_time
+
+            outcome = "WIN" if pnl_usd > 0 else ("LOSS" if pnl_usd < 0 else "FLAT")
             writer.writerow([
                 t["trade_id"],
                 t["timestamp"],
@@ -156,13 +167,13 @@ def export_trades(trader, out_dir):
                 t["market_title"],
                 t["headline"],
                 t["direction"],
-                t["status"],
+                t.get("status", "open"),
                 t["entry_price"],
-                r["current_price"],
+                current_price,
                 t["shares"],
-                r["pnl_usd"],
-                f"{r['pnl_pct']:.2f}%",
-                _fmt_duration(r["time_held"]),
+                pnl_usd,
+                f"{pnl_pct:.2f}%",
+                _fmt_duration(held),
                 t.get("exit_price", ""),
                 t.get("exit_timestamp", ""),
                 t.get("exit_reason", ""),
@@ -172,7 +183,7 @@ def export_trades(trader, out_dir):
                 outcome,
             ])
 
-    print(f"  trades.csv     — {len(trade_results)} rows")
+    print(f"  trades.csv     — {len(trader._trades)} rows")
     return path
 
 

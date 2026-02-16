@@ -6,11 +6,13 @@ cd "$SCRIPT_DIR"
 
 source venv/bin/activate
 
-SLEEP_SECONDS=$((4 * 60 * 60))
+PIPELINE_INTERVAL=$((4 * 60 * 60))   # full pipeline every 4 hours
+CHECK_INTERVAL=$((2 * 60))            # check open trades every 2 minutes
 
 while true; do
+    # ── Full pipeline: fetch data, match, log new trades ──────────
     echo "=========================================="
-    echo "  Polymarket Signal Chaser — Pipeline Run"
+    echo "  Polymarket Signal Chaser — Full Pipeline"
     echo "  $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     echo "=========================================="
     echo
@@ -25,12 +27,24 @@ while true; do
     echo
     python -m src.dashboard
 
-    NEXT_RUN=$(date -u -d "+4 hours" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null \
-            || date -u -v+4H '+%Y-%m-%d %H:%M:%S UTC')
+    NEXT_PIPELINE=$(date -u -d "+4 hours" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null \
+                 || date -u -v+4H '+%Y-%m-%d %H:%M:%S UTC')
     echo
     echo "=========================================="
-    echo "  Next run: $NEXT_RUN"
-    echo "  Sleeping for 4 hours..."
+    echo "  Next full pipeline: $NEXT_PIPELINE"
+    echo "  Checking open trades every 2 minutes..."
     echo "=========================================="
-    sleep "$SLEEP_SECONDS"
+
+    # ── Between pipelines: check trades frequently ────────────────
+    ELAPSED=0
+    while [ "$ELAPSED" -lt "$PIPELINE_INTERVAL" ]; do
+        sleep "$CHECK_INTERVAL"
+        ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+
+        echo
+        echo "------------------------------------------"
+        echo "  Trade check — $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "------------------------------------------"
+        python -m src.paper_trading.check
+    done
 done

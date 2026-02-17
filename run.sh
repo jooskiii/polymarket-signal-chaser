@@ -6,8 +6,8 @@ cd "$SCRIPT_DIR"
 
 source venv/bin/activate
 
-PIPELINE_INTERVAL=$((20 * 60))        # full pipeline every 20 minutes
-CHECK_INTERVAL=$((2 * 60))            # check open trades every 2 minutes
+PIPELINE_INTERVAL=$((5 * 60))         # full pipeline every 5 minutes
+CHECK_INTERVAL=$((1 * 60))            # check open trades every 1 minute
 
 while true; do
     # ── Full pipeline: fetch data, match, log new trades ──────────
@@ -27,12 +27,12 @@ while true; do
     echo
     python -m src.dashboard
 
-    NEXT_PIPELINE=$(date -u -d "+20 minutes" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null \
-                 || date -u -v+20M '+%Y-%m-%d %H:%M:%S UTC')
+    NEXT_PIPELINE=$(date -u -d "+5 minutes" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null \
+                 || date -u -v+5M '+%Y-%m-%d %H:%M:%S UTC')
     echo
     echo "=========================================="
     echo "  Next full pipeline: $NEXT_PIPELINE"
-    echo "  Checking open trades every 2 minutes..."
+    echo "  Checking open trades every 1 minute..."
     echo "=========================================="
 
     # ── Between pipelines: check trades frequently ────────────────
